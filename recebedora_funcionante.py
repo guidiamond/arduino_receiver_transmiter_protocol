@@ -78,22 +78,25 @@ def main():
         EOP = bytearray([0xF1, 0xF2, 0xF3, 0xF4])
 
         return (payload_size + bs_payload + EOP)
+    
+    image = bytearray()
+    while True:
+        header = com.getData(10)[0]
+        if header != None and header != '':
+            payload_size = int.from_bytes(header, "big")
+            bs_payload_with_eop = com.getData(payload_size + 4)[0]
+            bs_payload = bs_payload_with_eop[:-4]
+            message_status = message_analyzer(bs_payload_with_eop, payload_size)
+            payload = undo_byte_stuffing(bs_payload)
+            payload = payload[:-4]
 
-    header = com.getData(10)[0]
-    payload_size = int.from_bytes(header, "big")
-    bs_payload_with_eop = com.getData(payload_size + 4)[0]
-    bs_payload = bs_payload_with_eop[:-4]
-    message_status = message_analyzer(bs_payload_with_eop, payload_size)
-    payload = undo_byte_stuffing(bs_payload)
-    payload = payload[:-4]
+            bs_payload_send = byte_stuffing(message_status)
 
-    bs_payload_send = byte_stuffing(message_status)
+            data_send = add_header_eop(bs_payload_send)
 
-    data_send = add_header_eop(bs_payload_send)
-
-    com.sendData(data_send)
-
-    #open("toad.png", 'wb').write(payload)
+            com.sendData(data_send)
+            image += (payload)
+            open("toad.png", 'wb').write(image)
 
     # Encerra comunicação
     print("-------------------------")
