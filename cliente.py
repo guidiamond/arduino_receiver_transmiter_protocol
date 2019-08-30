@@ -5,7 +5,7 @@ import time
 from enlace import *
 import numpy as np
 print("comecou")
-from math import ceil
+from math import floor
 
 # Serial Com Port
 serialName = "/dev/ttyACM0"           # Ubuntu (variacao de)
@@ -23,22 +23,25 @@ def main():
 
     def file_spliter(raw_file, split_size):
         raw_file_size = len(raw_file)
-        package_number = ceil(ra,,w_file_size / split_size)
-        image = []
-        for e in range(package_number):
-            index_before = e
-            index_after  = package_number * e
-            inicial = 0
-            if inicial = 0:
-                image.append(raw_file[0:128:])
+        n = floor(raw_file_size / split_size)
+
+        l_pacotes = []
+
+        for e in range(0,n):            
+            pkg = raw_file[:split_size]
+            l_pacotes.append(pkg)
+
+            raw_file = raw_file[split_size:]
             
-        return package_number
+        l_pacotes.append(raw_file)
+
+        return l_pacotes
+
 
     def byte_stuffing(payload):
         EOP = bytearray([0xF1, 0xF2, 0xF3, 0xF4])
         EOP_stuffing = bytearray(
             [0x00, 0xF1, 0x00, 0xF2, 0x00, 0xF3, 0x00, 0xF4])
-        print(payload)
         payload_stuffed = payload.replace(EOP, EOP_stuffing)
 
         return payload_stuffed
@@ -53,21 +56,22 @@ def main():
 
         return byte_message
 
-    def add_header_eop(bs_payload):
-        # header
-        payload_size = len(bs_payload).to_bytes(10, byteorder='big')
+    def add_header_eop(payload, n, total_pacotes):
         # eop
         EOP = bytearray([0xF1, 0xF2, 0xF3, 0xF5])
+        # header
+        data_size = (len(payload)+len(EOP)).to_bytes(8, byteorder='big')
 
-        return (payload_size + bs_payload + EOP)
+        #        num pacote,                      total de pacotes,                            tamanho da mensagem
+        header = n.to_bytes(1, byteorder='big') + total_pacotes.to_bytes(1, byteorder='big') + data_size
+        
+        return (header + payload + EOP)
 
     def message_verifier(message_status):
-        message_code = int.from_bytes(message_status[:2], "big")
-        eop_position = int.from_bytes(message_status[2:], "big")
+        message_code = int.from_bytes(message_status[11:-4], "big")
         if message_code == 0:  # EOP ENCONTRADO
             print("---------")
             print("OK!")
-            # print("EOP ENCONTRADO na posicao {0}" .format(eop_position))
             print("---------")
             return 0
             # return [1, message_status]
@@ -95,21 +99,38 @@ def main():
     with open("batata.png", "rb") as foto:
         txBuffer = foto.read()
 
-    bs_payload = byte_stuffing(txBuffer)
-    package_numbers = file_spliter(bs_payload, 128)
+    packages = file_spliter(txBuffer, 128)
+    n_pkgs = len(packages)
 
-    for package_number in package:
-        data = add_header_eop(package)
+    e = 1
+    for pkg in packages:
+        pkg_bs = byte_stuffing(pkg)
+        data = add_header_eop(pkg_bs, e, n_pkgs)
+        
         com.sendData(data)
-        message_status = com.getData(10)[0]
+        print("enviado pacote num: " + str(e))
+        e += 1
 
-        payload_receive_size = int.from_bytes(message_status, "big")
+        header_ms = com.getData(10)[0]
+        
+        if header_ms[0] == header_ms[1]:
+            print(len(txBuffer))
+            print("--------------------")
+            print('ACABOU A TRANSMICAO')
+            print("--------------------")
+            com.disable()
+            return 
 
-        bs_payload_with_eop = com.getData(payload_receive_size + 4)[0]
-        bs_payload = undo_byte_stuffing(bs_payload_with_eop[:-4])
-        check = message_verifier(bs_payload)
-        if check == 1:
-            return 1
+        else:
+            header_ms = int.from_bytes(header_ms[2:], "big")
+            message_status = com.getData(header_ms)[0]
+            check = message_verifier(message_status)
+            if check == 1:
+                com.disable()
+                return  
+
+        print(" ")
+        
 
 if __name__ == "__main__":
     main()
